@@ -1,0 +1,330 @@
+/*
+ * player.cpp
+ *
+ *  Created on: 2013-10-25
+ *      Author: david
+ */
+
+#include "player.h"
+
+Player::Player(int r, int c, int g) {
+	Rows = r;
+	Columns = c;
+	Goal = g;
+	Depth = 2;
+	name = "Player";
+    top = new int[Columns];
+    board = new char *[Rows];
+    myMarble = 'O';
+    otherMarble = 'X';
+    Space = ' ';
+    for(int i = 0; i < r; i++) {
+       board[i] = new char[c];
+    }
+    initBoard(board, top);
+
+}
+
+void Player::initBoard(char **board, int top[]) {
+   for(int i = 0; i < Rows; i++) {
+	  for(int j = 0; j < Columns; j++) {
+		 board[i][j] = Space;
+	  }
+   }
+   for(int i = 0; i < Columns; i++) {
+	  top[i] = 0;
+   }
+}
+
+int Player::move(int lastMove) {
+	//This updates the board in this object
+	//fills the opponents move in the
+	//chosen space then makes the column
+	//one bigger
+   if (lastMove != -1) {
+	  board[top[lastMove]][lastMove] = otherMarble;
+	  top[lastMove]++;
+   }
+   //creates a list of which columns are full
+   //and which arent
+   vector<int> candidates = getValidMoves(top);
+   //Variables to track which column is currently
+   //considered best
+   int currBest = 0;
+   int bestMove = 0;
+   int bestColumn = 0;
+   //sets the alpha beta values to arbitrarily large integers
+   //will be shrunk as used in the evaluation function
+   int alpha = 100000;
+   int beta = 100000;
+   //keeps track of whether current player is max or min
+   bool maxPlayer = true;
+   //goes through list and evaluates that node
+   //if it's not full
+   for(int i = 0; i < candidates.size(); i++) {
+	   //calls a recursive evaluation function
+	   //on the possible columns to check which
+	   //will result in the highest maximum
+	   //utility
+	   if(candidates[i] == 1) {
+		   currBest = evaluationFunction(board,top,Depth,i,maxPlayer,alpha,beta);
+	   }
+	   if(currBest > bestMove) {
+		   bestMove = currBest;
+		   bestColumn = i;
+	   }
+   }
+
+   return bestColumn;
+}
+
+int Player::evaluationFunction(char **tempState, int* tempTop,int currDepth,
+								int col, bool maxPlayer, int alpha, int beta) {
+
+	char **boardState = new char *[Rows];
+	boardState = tempState;
+	int *newTop = new int[Columns];
+	newTop = tempTop;
+	//if the current decisions is the player (max) then update the board and add to the top
+	//else do the same with the other player
+	if(maxPlayer == true) {
+		boardState[newTop[col]][col] = myMarble;
+		newTop[col]++;
+	} else {
+		boardState[newTop[col]][col] = otherMarble;
+		newTop[col]++;
+	}
+
+	//now that this is updated the win conditions can be checked
+		if(checkWinner(boardState) == true) {
+			//this function basically checks if the current board state
+			//contains a win it's set to a high number because the utlity
+			//of moving to this state is very beneficial
+			int winMove = 300;
+			return winMove;
+		}
+	//if current depth is zero, the tree has finished searching and
+	//evaluation of the current board state needs to take place
+	if(currDepth == 0) {
+		int bestMove = heuristic(boardState);
+	}
+	//now we get the next possible candidates, which is the basis for recursion
+	//down the tree
+    vector<int> candidates = getValidMoves(newTop);
+    if(maxPlayer == true) {
+    	for(int i = 0; i < candidates.size(); i++) {
+    		if(candidates[i] == 1) {
+    			alpha = max(alpha,evaluationFunction(boardState,newTop,
+    												currDepth-1,i,false,alpha,beta));
+    		}
+    		if(beta <= alpha) {
+    			break;
+    		}
+    	}
+    	return alpha;
+    } else {
+    	for(int j = 0; j < candidates.size(); j++) {
+    		if(candidates[j] == 1) {
+    			beta = min(beta,evaluationFunction(boardState,newTop,
+    											   currDepth-1,j,true,alpha,beta));
+    			if(beta <= alpha) {
+    				break;
+    			}
+    		}
+    	}
+    	return beta;
+    }
+}
+
+char **Player::copyBoard(char **oldBoard) {
+ 	//create a board that is the same
+	//size as the old one
+    char **newBoard = new char *[Rows];
+    for (int i = 0; i < Rows; i++) {
+        newBoard[i] = new char[Columns];
+    }
+    
+    // copy the values from the old board
+	// into the new one
+    for (int i = 0; i < Rows; i++) {
+        for (int j = 0; j < Columns; j++) {
+            newBoard[i][j] = oldBoard[i][j];
+        }
+    }
+    
+    // return the carbon copy
+    return board;
+
+//gets all the moves that are currently valid
+//a move is not valid if the column is completely
+//full
+vector<int> Player::getValidMoves(int *currTop) {
+	vector<int> validMoves;
+    for (int i = 0; i < Columns; i++) {
+    	if (currTop[i] < Rows) {
+    		validMoves.push_back(1);
+    	} else {
+    		validMoves.push_back(0);
+    	}
+    return validMoves;
+	}
+}
+
+//heuristic function, checks how much value should be assigned to
+//a generalized state in the board based on certain factors
+int Player::heuristic(char **terminalBoard) {
+	//tracks how many values in a row are of the same value
+	//followed by empty spaces, if so these spots are assigned
+	//high utility
+	int count;
+	int emptyCount;
+	//keeps track of the utility of this state
+	int utility;
+	//this loops through the entire board and checks for indicators
+	//of positive or negative utility, where we define a positive
+	//utility as beneficial to MAX a negative utility is beneficial
+	//to min
+	for(int i=0;i<Rows;i++) {
+		for(int j=0;j<Columns;j++) {
+			if(terminalBoard[i][j] == myMarble && count >= 0) {
+				//keeps track of the number of one type of piece
+				//in a row
+				count++;
+			} else if(terminalBoard[i][j] == myMarble && count < 0) {
+				//sets the utility to zero when one marble is hit
+				//after a stream of another type was seen then iterates
+				//it
+				count = 0;
+				count++;
+				emptyCount = 0;
+			} else if(terminalBoard[i][j] == ' ') {
+				//tracks the number of empty spots without breaking
+				//a sequence of filled matches
+				emptyCount++;
+			} else if(terminalBoard[i][j] == otherMarble && count <= 0) {
+				//makes count smaller if the min player has pieces that
+				count--;
+			} else if(terminalBoard[i][j] == otherMarble && count > 0) {
+				//sets the tility to zero when one marble is hit
+				//after a stream of another tpye was seen then iterates
+				//it
+				count = 0;
+				count--;
+				emptyCount = 0;
+			}
+			if(count == 2 && emptyCount >= 2) {
+				utility += 3;
+			}
+			if(count == 3 && emptyCount >= 1) {
+				utility += 7;
+			}
+			if(count == -2 && emptyCount >= 2) {
+				utility += -3;
+			}
+			if(count == -3 && emptyCount >= 1) {
+				utility += -7;
+			}
+		}
+	}
+	for(int i=0;i<Columns;i++) {
+		for(int j=0;j<Rows;j++) {
+			if(terminalBoard[j][i] == myMarble && count >= 0) {
+				//keeps track of the number of one type of piece
+				//in a row
+				count++;
+			} else if(terminalBoard[j][i] == myMarble && count < 0) {
+				//sets the utility to zero when one marble is hit
+				//after a stream of another type was seen then iterates
+				//it
+				count = 0;
+				count++;
+				emptyCount = 0;
+			} else if(terminalBoard[j][i] == ' ') {
+				//tracks the number of empty spots without breaking
+				//a sequence of filled matches
+				emptyCount++;
+			} else if(terminalBoard[j][i] == otherMarble && count <= 0) {
+				//makes count smaller if the min player has pieces that
+				count--;
+			} else if(terminalBoard[j][i] == otherMarble && count > 0) {
+				//sets the tility to zero when one marble is hit
+				//after a stream of another tpye was seen then iterates
+				//it
+				count = 0;
+				count--;
+				emptyCount = 0;
+			}
+			if(count == 2 && emptyCount >= 2) {
+				utility += 3;
+			}
+			if(count == 3 && emptyCount >= 1) {
+				utility += 7;
+			}
+			if(count == -2 && emptyCount >= 2) {
+				utility += -3;
+			}
+			if(count == -3 && emptyCount >= 1) {
+				utility += -7;
+			}
+		}
+	}
+	return utility;
+}
+
+//various mutators and accessors
+int Player::setDepth(int newDepth) {
+	Depth = newDepth;
+}
+
+string Player::setName(string newName) {
+	name = newName;
+}
+
+string Player::getName() {
+    return name;
+}
+
+//Checks to see if there's a winner
+int Player::checkWinner(char **checkBoard) {
+   bool win = false;
+
+   for(int i = 0; i < Columns; i++) {
+      win = checkLine(checkBoard, 0, i, +1, 0);
+   }
+   for(int i = 0; i < Rows; i++) {
+      win = checkLine(checkBoard, i, 0, 0, +1);
+   }
+   for(int i=0; i < Columns; i++) {
+      win = checkLine(checkBoard, 0, i, +1, -1);
+   }
+   for(int i=0; i < Columns; i++) {
+      win = checkLine(checkBoard, 0, i, +1, +1);
+   }
+   for(int i=0; i < Columns; i++) {
+      win = checkLine(checkBoard, Rows-1, i, +1, -1);
+   }
+   for(int i=0; i < Columns; i++) {
+      win = checkLine(checkBoard, Rows-1, i, +1, +1);
+   }
+
+   return win;
+}
+
+//Checks the lines to see if the player has won or not
+int Player::checkLine(char **checkBoard, int row, int col, int rdelta,
+					  int cdelta)
+{
+   int count = 0;
+
+   while (row < Rows && row >= 0 && col < Columns && col >= 0) {
+      if (checkBoard[row][col] == myMarble) {
+         count++;
+         if (count == Goal) return true;
+      } else {
+         count = 0;
+      }
+      row = row + rdelta;
+      col = col + cdelta;
+   }
+   return false;
+}
